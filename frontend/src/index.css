@@ -2,22 +2,22 @@
 
 @variant dark (&:is(.dark, .dark *));
 
-/* Landing-page image sections: each visual occupies the available viewport so the next section does not peek into view. */
+/* Landing-page image sections: the fixed two-row header is accounted for by App.tsx. */
 .landing-screen-section {
-  min-height: calc(100svh - 4rem);
+  min-height: calc(100svh - 5.5rem);
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
 
 @media (min-width: 1024px) {
   .landing-screen-section {
-    min-height: calc(100svh - 4rem);
+    min-height: calc(100svh - 6rem);
   }
 }
 
 @media (max-height: 700px) {
   .landing-screen-section {
-    min-height: calc(100svh - 4rem);
+    min-height: calc(100svh - 6rem);
   }
 }
 

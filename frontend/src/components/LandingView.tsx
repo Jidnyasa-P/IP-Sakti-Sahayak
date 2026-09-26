@@ -115,13 +115,26 @@ export const LandingView: React.FC<LandingViewProps> = ({
   return (
     <div className="w-full overflow-hidden">
       {/* Hero */}
-      <section className="landing-screen-section relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12 flex items-center snap-start">
+      <section className="landing-screen-section landing-hero-section relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12 flex items-center snap-start">
         <div
-          className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: "url('/landing-section-1-knowledge.png')" }}
+          className="absolute inset-0 -z-30 bg-[#e6efe4] dark:bg-slate-950"
           aria-hidden="true"
         />
-        <div className="absolute inset-0 -z-10 bg-white/58 dark:bg-slate-950/62" />
+        <div
+          className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: "url('/landing-section-1-knowledge.png')",
+            backgroundPosition: "center 52%",
+            backgroundSize: "cover",
+          }}
+          aria-hidden="true"
+        />
+        {/* Blend the image into a soft botanical tone instead of leaving a white band above it. */}
+        <div
+          className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(230,239,228,0.86)_0%,rgba(230,239,228,0.42)_22%,rgba(255,255,255,0.08)_58%,rgba(230,239,228,0.18)_100%)] dark:bg-[linear-gradient(180deg,rgba(15,35,25,0.82)_0%,rgba(15,35,25,0.36)_28%,rgba(2,6,23,0.14)_62%,rgba(15,35,25,0.38)_100%)]"
+          aria-hidden="true"
+        />
+        <div className="absolute -z-10 left-1/2 top-0 h-40 w-[70%] -translate-x-1/2 rounded-full bg-emerald-100/30 blur-3xl dark:bg-emerald-900/20" aria-hidden="true" />
         
         <div className="max-w-6xl mx-auto w-full">
           <div className="text-center lg:text-left lg:pl-2">
