@@ -2,6 +2,25 @@
 
 @variant dark (&:is(.dark, .dark *));
 
+/* Landing-page image sections: each visual occupies the available viewport so the next section does not peek into view. */
+.landing-screen-section {
+  min-height: calc(100svh - 4rem);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+@media (min-width: 1024px) {
+  .landing-screen-section {
+    min-height: calc(100svh - 4rem);
+  }
+}
+
+@media (max-height: 700px) {
+  .landing-screen-section {
+    min-height: calc(100svh - 4rem);
+  }
+}
+
 /* Scaled Typography System (115% intended scale) */
 html {
   font-size: 115%; /* 1rem = 18.4px (115% of standard 16px root font size) */
@@ -503,51 +522,4 @@ html {
 
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
-}
-
-
-/* --------------------------------------------------------------------------
-   Responsive Layout Safeguards
-   -------------------------------------------------------------------------- */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-}
-
-body {
-  overflow-x: hidden;
-}
-
-img,
-svg,
-video,
-canvas {
-  max-width: 100%;
-  height: auto;
-}
-
-button,
-a,
-input,
-select,
-textarea {
-  max-width: 100%;
-}
-
-@media (max-width: 1279px) {
-  html { font-size: 100%; }
-}
-
-@media (max-width: 639px) {
-  html { font-size: 100%; }
-  input, select, textarea { font-size: 16px; }
 }

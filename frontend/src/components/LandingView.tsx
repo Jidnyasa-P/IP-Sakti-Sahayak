@@ -24,6 +24,7 @@ import { DisclaimerBanner } from './DisclaimerBanner';
 import { useTranslation } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { authFetch } from './auth/authStorage';
+import { OfficialPartnersCarousel } from './OfficialPartnersCarousel';
 
 interface LandingViewProps {
   setActiveTab: (tab: ActiveTab) => void;
@@ -114,23 +115,22 @@ export const LandingView: React.FC<LandingViewProps> = ({
   return (
     <div className="w-full overflow-hidden">
       {/* Hero */}
-      <section className="relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 lg:pt-16 pb-14 sm:pb-20 min-h-[620px] flex items-center">
+      <section className="landing-screen-section relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12 flex items-center snap-start">
         <div
           className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/landing-section-1-knowledge.png')" }}
           aria-hidden="true"
         />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-white/86 via-white/52 to-white/10 dark:from-slate-950/90 dark:via-slate-950/58 dark:to-slate-950/12" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-white/10 via-transparent to-white/30 dark:from-slate-950/10 dark:to-slate-950/30" />
-
+        <div className="absolute inset-0 -z-10 bg-white/58 dark:bg-slate-950/62" />
+        
         <div className="max-w-6xl mx-auto w-full">
-          <div className="text-center lg:text-left">
+          <div className="text-center lg:text-left lg:pl-2">
             <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold tracking-wide shadow-sm dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200">
               <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
               <span>{t('landing.badge', 'Authoritative AYUSH & Intellectual Property Decision Support')}</span>
             </div>
 
-            <h1 className="mt-5 text-4xl sm:text-5xl lg:text-6xl font-serif font-semibold tracking-tight leading-[1.05] text-slate-950 dark:text-white">
+            <h1 className="mt-8 sm:mt-10 text-4xl sm:text-5xl lg:text-6xl font-serif font-semibold tracking-tight leading-[1.05] text-slate-950 dark:text-white">
               IP-SAKTI <span className="text-emerald-700 dark:text-emerald-400">Sahayak</span>
             </h1>
 
@@ -217,13 +217,13 @@ export const LandingView: React.FC<LandingViewProps> = ({
       </section>
 
       {/* Capabilities */}
-      <section className="relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-12 sm:py-16 border-y border-slate-300 dark:border-slate-700">
+      <section className="landing-screen-section relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex items-center border-y border-slate-300 dark:border-slate-700 snap-start">
         <div
           className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/landing-section-2-science.png')" }}
           aria-hidden="true"
         />
-        <div className="absolute inset-0 -z-10 bg-white/62 dark:bg-slate-950/68" />
+        <div className="absolute inset-0 -z-10 bg-white/58 dark:bg-slate-950/64" />
         <div className="max-w-6xl mx-auto">
           <div className="max-w-2xl mb-8">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">Explore the platform</p>
@@ -258,13 +258,13 @@ export const LandingView: React.FC<LandingViewProps> = ({
       </section>
 
       {/* FAQs */}
-      <section id="faqs" className="relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-y border-slate-300 dark:border-slate-700">
+      <section id="faqs" className="landing-screen-section relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex items-center border-y border-slate-300 dark:border-slate-700 snap-start">
         <div
           className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/landing-section-3-ip.png')" }}
           aria-hidden="true"
         />
-        <div className="absolute inset-0 -z-10 bg-white/64 dark:bg-slate-950/70" />
+        <div className="absolute inset-0 -z-10 bg-white/58 dark:bg-slate-950/64" />
         <div className="max-w-4xl mx-auto">
           <div className="max-w-2xl mb-8">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">Frequently Asked Questions</p>
@@ -327,13 +327,13 @@ export const LandingView: React.FC<LandingViewProps> = ({
       </section>
 
       {/* About Us */}
-      <section id="about-us" className="relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+      <section id="about-us" className="landing-screen-section relative isolate overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex items-center snap-start">
         <div
           className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/landing-section-4-global.png')" }}
           aria-hidden="true"
         />
-        <div className="absolute inset-0 -z-10 bg-white/64 dark:bg-slate-950/70" />
+        <div className="absolute inset-0 -z-10 bg-white/58 dark:bg-slate-950/64" />
         <div className="max-w-6xl mx-auto grid lg:grid-cols-[0.8fr_1.2fr] gap-8 lg:gap-14 items-start">
           <div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 flex items-center justify-center">
@@ -443,6 +443,8 @@ export const LandingView: React.FC<LandingViewProps> = ({
           <DisclaimerBanner />
         </div>
       </div>
+
+      <OfficialPartnersCarousel links={[]} />
     </div>
   );
 };

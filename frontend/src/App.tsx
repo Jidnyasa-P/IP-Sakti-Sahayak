@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Header, ActiveTab } from "./components/Header";
 import { LandingView } from "./components/LandingView";
 import { ChatView } from "./components/ChatView";
@@ -13,7 +13,6 @@ import { LoginView } from "./components/LoginView";
 import { RegisterView } from "./components/RegisterView";
 import { ProfileView } from "./components/ProfileView";
 import { ExpertAdvisoryView } from "./components/ExpertAdvisoryView";
-import { OfficialPartnersCarousel } from "./components/OfficialPartnersCarousel";
 import { CitationModal } from "./components/CitationModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GuidedTour } from "./components/GuidedTour";
@@ -29,6 +28,7 @@ const TOUR_STORAGE_KEY = "ipsakti_guided_tour_status";
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("landing");
+  const [isTourActive, setIsTourActive] = useState(false);
   const { currentLanguage, setLanguage, t } = useTranslation();
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
@@ -49,86 +49,6 @@ function AppContent() {
     setActiveTab("workspace");
   };
   const { isLoggedIn, currentUser } = useAuth();
-  const [officialPortalLinks, setOfficialPortalLinks] = useState<
-    { id: string; label: string; url: string }[]
-  >([]);
-
-  useEffect(() => {
-    let active = true;
-    let retryTimer: number | undefined;
-
-    const loadOfficialLinks = async (attempt = 0) => {
-      try {
-        const res = await fetch(`/api/official-links?ts=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`official-links request failed: ${res.status}`);
-        const data = await res.json();
-        const links = Array.isArray(data?.links) ? data.links : [];
-        const normalized = links
-          .map((item: { id?: string; label?: string; url?: string }) => ({
-            id: String(item.id || item.url || "official"),
-            label: String(item.label || "Official Source"),
-            url: String(item.url || "").trim(),
-          }))
-          .filter((item: { url: string }) => item.url);
-
-        if (!active) return;
-        setOfficialPortalLinks(normalized);
-
-        // The RAG service may be waking from sleep on Render. Retry when the
-        // first request succeeds but returns no manifest-backed links yet.
-        if (normalized.length === 0 && attempt < 3) {
-          retryTimer = window.setTimeout(() => loadOfficialLinks(attempt + 1), 2500);
-        }
-      } catch {
-        if (!active) return;
-        setOfficialPortalLinks([]);
-        if (attempt < 3) {
-          retryTimer = window.setTimeout(() => loadOfficialLinks(attempt + 1), 2500);
-        }
-      }
-    };
-
-    loadOfficialLinks();
-
-    return () => {
-      active = false;
-      if (retryTimer) window.clearTimeout(retryTimer);
-    };
-  }, []);
-
-  // First-time visitor guided tour auto-discovery state
-  // The site always opens directly on the Home/Landing page.
-  // The walkthrough is available from the Home page but does not block first load.
-  const [isTourActive, setIsTourActive] = useState<boolean>(false);
-
-  const handleStartTour = () => {
-    setIsTourActive(true);
-  };
-
-  const handleCompleteTour = () => {
-    try {
-      localStorage.setItem(TOUR_STORAGE_KEY, "completed");
-    } catch (e) {
-      console.warn("Failed to save tour status:", e);
-    }
-    setIsTourActive(false);
-    if (!isLoggedIn) {
-      setActiveTab("landing");
-    }
-  };
-
-  const handleSkipTour = () => {
-    try {
-      localStorage.setItem(TOUR_STORAGE_KEY, "skipped");
-    } catch (e) {
-      console.warn("Failed to save tour status:", e);
-    }
-    setIsTourActive(false);
-    if (!isLoggedIn) {
-      setActiveTab("landing");
-    }
-  };
-
   const isExpert =
     isLoggedIn && currentUser && normalizeRole(currentUser.role) === "Expert";
 
@@ -241,6 +161,20 @@ function AppContent() {
     }
   };
 
+  function handleStartTour(): void {
+    setIsTourActive(true);
+  }
+
+  function handleCompleteTour(): void {
+    setIsTourActive(false);
+    window.localStorage.setItem(TOUR_STORAGE_KEY, "completed");
+  }
+
+  function handleSkipTour(): void {
+    setIsTourActive(false);
+    window.localStorage.setItem(TOUR_STORAGE_KEY, "skipped");
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-emerald-100 dark:selection:bg-emerald-900 selection:text-emerald-900 dark:selection:text-emerald-100 w-full overflow-x-hidden transition-colors">
       {/* Primary Application Header */}
@@ -279,50 +213,81 @@ function AppContent() {
 
       <LegalPolicyModal document={legalDocument} onClose={() => setLegalDocument(null)} />
 
-      <OfficialPartnersCarousel links={officialPortalLinks} />
-
-      {/* Persistent Official Portals Footer */}
-      <footer className="w-full bg-slate-950 dark:bg-black border-t-2 border-slate-800 py-8 mt-auto mb-14 lg:mb-0 transition-colors">
-        <div className="w-full px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-            <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 flex items-center justify-center shrink-0">
-              <img src="/ip-sakti-logo.png" alt="IP-SAKTI logo" className="w-full h-full object-contain" />
+      {/* Government-style footer: structured, compact and responsive. */}
+      <footer className="w-full bg-slate-950 text-slate-200 border-t border-slate-800 mt-auto mb-14 lg:mb-0">
+        <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-9">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1.25fr_1fr_1fr_1.15fr] gap-7 lg:gap-9">
+            <div className="min-w-0">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 flex items-center justify-center rounded-lg bg-white p-1.5 shrink-0">
+                  <img src="/ip-sakti-logo.png" alt="IP-SAKTI logo" className="w-full h-full object-contain" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="font-serif font-bold text-white text-lg">IP-SAKTI Sahayak</h2>
+                  <p className="text-xs sm:text-sm text-slate-300 mt-1">AYUSH & Traditional Knowledge IPR Research Platform</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-400">
+                <span>AI-assisted research</span>
+                <span>•</span>
+                <span>Source-aware decision support</span>
+                <span>•</span>
+                <span>Verify current official sources</span>
+              </div>
             </div>
-            <span className="font-serif font-bold text-white text-sm">
-              {t("brand.name", "IP-SAKTI")} {t("brand.badge", "Sahayak")}
-            </span>
-            <span className="text-slate-600">|</span>
-            <span className="truncate text-slate-400 text-xs">
-              {t(
-                "footer.brand_subtitle",
-                "AYUSH & Traditional Knowledge IPR Research Platform",
-              )}
-            </span>
+
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-white mb-3">Useful Links</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                {[
+                  ["Home", "landing"],
+                  ["Sahayak AI", "chat"],
+                  ["Product Analyzer", "product"],
+                  ["IPR Navigator", "ipr"],
+                  ["TK & ABS", "tk"],
+                  ["Research", "research"],
+                  ["HelpDesk", "helpdesk"],
+                  ...(isLoggedIn ? [["My Workspace", "workspace"]] : []),
+                ].map(([label, tab]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab as ActiveTab)}
+                    className="text-left text-slate-300 hover:text-white hover:underline transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-white mb-3">Policies & Support</h3>
+              <div className="flex flex-col gap-2 text-sm">
+                <button type="button" onClick={() => setLegalDocument("terms")} className="text-left text-slate-300 hover:text-white hover:underline">Terms & Conditions</button>
+                <button type="button" onClick={() => setLegalDocument("privacy")} className="text-left text-slate-300 hover:text-white hover:underline">Privacy Policy</button>
+                <button type="button" onClick={() => setActiveTab("helpdesk")} className="text-left text-slate-300 hover:text-white hover:underline">Feedback & Contact</button>
+                <button type="button" onClick={() => setActiveTab("helpdesk")} className="text-left text-slate-300 hover:text-white hover:underline">Help / FAQs</button>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-white mb-3">Platform</h3>
+              <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-slate-300">
+                <span>India-aware research</span>
+                <span>•</span>
+                <span>International coverage</span>
+                <span>•</span>
+                <span>Multilingual assistance</span>
+                <span>•</span>
+                <span>Evidence-grounded workflows</span>
+              </div>
+            </div>
           </div>
 
-          {/* Official Statutory Portal Links — URLs are resolved from manifest-backed document metadata. */}
-            <div className="flex flex-wrap items-center justify-center lg:justify-end gap-x-6 gap-y-3 text-xs text-slate-200">
-              {officialPortalLinks.map((link) => (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-slate-200 hover:text-white hover:underline flex items-center gap-1"
-                >
-                  <span>{link.label}</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              ))}
-              <span className="hidden lg:inline text-slate-700">|</span>
-              <button type="button" onClick={() => setLegalDocument("terms")} className="font-semibold text-white hover:text-emerald-300 hover:underline">Terms & Conditions</button>
-              <button type="button" onClick={() => setLegalDocument("privacy")} className="font-semibold text-white hover:text-emerald-300 hover:underline">Privacy Policy</button>
-            </div>
-          </div>
-          <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-800 pt-4 text-[10px] text-slate-400">
-            <span>AI-assisted research and decision support • Verify important information against current official sources.</span>
+          <div className="mt-7 pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-400">
             <span>© {new Date().getFullYear()} IP-SAKTI Sahayak</span>
+            <span>For information and decision support; verify current official sources before action.</span>
           </div>
         </div>
       </footer>
