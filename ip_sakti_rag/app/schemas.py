@@ -10,7 +10,11 @@ from __future__ import annotations
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-Language = Literal["en", "hi", "mr"]
+Language = Literal[
+    "en", "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok",
+    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
+    "ta", "te", "ur",
+]
 ConfidenceLevel = Literal["High", "Moderate", "Low", "Insufficient evidence"]
 
 ProductCategory = Literal[

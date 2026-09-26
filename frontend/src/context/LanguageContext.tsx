@@ -64,7 +64,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
           parsed.strings['landing.btn_ask'] !== BASE_DICTIONARY['landing.btn_ask']
         ) {
           setActiveDictionary({ ...instantDictionary, ...parsed.strings });
-          setTranslationSource(parsed.source || 'gemini-3.8-flash (cached)');
+          setTranslationSource(parsed.source || 'bhashini_live (cached)');
         } else {
           localStorage.removeItem(`${CACHE_PREFIX}${lang}`);
         }
@@ -73,7 +73,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       localStorage.removeItem(`${CACHE_PREFIX}${lang}`);
     }
 
-    // Call server translation endpoint using Gemini API
+    // Call server translation endpoint using BHASHINI
     setIsTranslating(true);
     try {
       const response = await fetch(apiUrl('/api/translate'), {
@@ -95,13 +95,13 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
             }
           }
           setActiveDictionary(sanitized);
-          setTranslationSource(data.source || 'gemini-3.8-flash');
+          setTranslationSource(data.source || 'bhashini_live');
           try {
             localStorage.setItem(
               `${CACHE_PREFIX}${lang}`,
               JSON.stringify({
                 strings: sanitized,
-                source: data.source || 'gemini-3.8-flash',
+                source: data.source || 'bhashini_live',
                 timestamp: Date.now(),
               })
             );
@@ -109,7 +109,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       }
     } catch (err) {
-      console.warn('Live translation via Gemini API encountered network issue, using verified statutory dictionary:', err);
+      console.warn('Live translation via BHASHINI encountered a network issue, using verified statutory dictionary:', err);
     } finally {
       setIsTranslating(false);
     }

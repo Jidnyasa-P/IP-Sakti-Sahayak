@@ -15,9 +15,9 @@ export const BASE_DICTIONARY: Record<string, string> = {
   'nav.workspace': 'My Workspace',
   'nav.admin': 'Admin & Telemetry',
   'nav.role_expert': 'EXPERT',
-  'nav.translating': 'Translating website via Gemini API...',
-  'nav.translated_gemini': 'Translated with Gemini 3.8 Flash',
-  'nav.live_gemini': 'Gemini API Active',
+  'nav.translating': 'Translating website via BHASHINI...',
+  'nav.translated_gemini': 'Translated with BHASHINI',
+  'nav.live_gemini': 'BHASHINI Active',
 
   // Statutory Advisory
   'disclaimer.title': 'Statutory Advisory:',
@@ -199,7 +199,7 @@ export const HINDI_STATUTORY_DICTIONARY: Record<string, string> = {
   'nav.admin': 'प्रशासन व टेलीमेट्री',
   'nav.role_expert': 'विशेषज्ञ',
   'nav.translating': 'जेमिनी एआई द्वारा वेबसाइट का अनुवाद जारी...',
-  'nav.translated_gemini': 'जेमिनी ३.८ फ्लैश द्वारा अनूदित',
+  'nav.translated_gemini': 'BHASHINI द्वारा अनूदित',
   'nav.live_gemini': 'जेमिनी एपीआई सक्रिय',
 
   // Statutory Advisory

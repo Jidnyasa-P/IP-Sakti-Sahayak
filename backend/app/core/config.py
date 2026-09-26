@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # Translation (UI strings -- separate from RAG; unaffected by the above)
     translation_provider: str = "bhashini"
-    bhashini_api_key: str = ""
+    bhashini_inference_api_key: str = ""
     bhashini_user_id: str = ""
     bhashini_ulca_api_key: str = ""
 
@@ -82,7 +82,11 @@ class Settings(BaseSettings):
 
     @property
     def bhashini_configured(self) -> bool:
-        return bool(self.bhashini_api_key and self.bhashini_user_id)
+        return bool(
+            self.bhashini_user_id
+            and self.bhashini_ulca_api_key
+            and self.bhashini_inference_api_key
+        )
 
     @property
     def llm_configured(self) -> bool:
