@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     confidence_expert_escalation_threshold: float = 0.80
 
     # Translation (Bhashini) — see app/translation/bhashini_client.py
-    translation_provider: str = "none"  # none | bhashini
+    translation_provider: str = "bhashini"  # none | bhashini
     bhashini_api_key: str | None = None  # legacy compatibility
     bhashini_user_id: str | None = None
     bhashini_ulca_api_key: str | None = None

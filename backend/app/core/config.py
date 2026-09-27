@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     rag_service_shared_secret: str = ""
     rag_service_timeout_seconds: float = 60.0
 
-    # Translation (UI strings -- separate from RAG; unaffected by the above)
+    # Translation (Bhashini UI + RAG language boundary)
     translation_provider: str = "bhashini"
     bhashini_api_key: str = ""  # legacy compatibility
     bhashini_user_id: str = ""

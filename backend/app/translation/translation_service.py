@@ -25,6 +25,11 @@ from app.core.logging import logger
 _DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "translations.json")
 
 BHASHINI_PIPELINE_ENDPOINT = "https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
+BHASHINI_CONFIG_ENDPOINT = "https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline"
+BHASHINI_PIPELINE_IDS = (
+    "64392f96daac500b55c543cd",
+    "643930aa521a4b1ba0f4c41d",
+)
 
 
 def _load_dictionaries() -> dict:
@@ -68,56 +73,102 @@ class DictionaryProvider(TranslationProvider):
 
 class BhashiniProvider(TranslationProvider):
     def __init__(self, user_id: str, ulca_key: str, inference_api_key: str):
-        self.user_id = user_id
-        self.ulca_key = ulca_key
-        self.inference_api_key = inference_api_key
+        self.user_id = user_id.strip()
+        self.ulca_key = ulca_key.strip()
+        self.inference_api_key = inference_api_key.strip()
+
+    @staticmethod
+    def _error_text(resp: httpx.Response) -> str:
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                for key in ("message", "error", "errorMessage", "detail"):
+                    if data.get(key):
+                        return str(data[key])[:500]
+        except Exception:
+            pass
+        return resp.text.strip().replace("\n", " ")[:500] or "No error body returned."
 
     async def _call_pipeline(self, texts: list[str], target_language: str) -> list[str] | None:
         if not texts or target_language == "en":
             return texts
+
         headers = {
             "userID": self.user_id,
             "ulcaApiKey": self.ulca_key,
             "Content-Type": "application/json",
         }
-        config_payload = {
-            "pipelineTasks": [{
-                "taskType": "translation",
-                "config": {"language": {"sourceLanguage": "en", "targetLanguage": target_language}},
-            }],
-            "pipelineRequestConfig": {"pipelineId": "64392f96daac500b55c543cd"},
-        }
+        source = "en"
+        errors: list[str] = []
+
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
-                config_resp = await client.post(
-                    "https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline",
-                    json=config_payload, headers=headers,
-                )
-                config_resp.raise_for_status()
-                config = config_resp.json()
-                endpoint = config["pipelineInferenceAPIEndPoint"]
-                compute_url = endpoint["callbackUrl"]
-                service_id = config["pipelineResponseConfig"][0]["config"][0]["serviceId"]
-                inference_header = endpoint.get("inferenceApiKey") or {}
+                config = None
+                for pipeline_id in BHASHINI_PIPELINE_IDS:
+                    payload = {
+                        "pipelineTasks": [{
+                            "taskType": "translation",
+                            "config": {"language": {"sourceLanguage": source, "targetLanguage": target_language}},
+                        }],
+                        "pipelineRequestConfig": {"pipelineId": pipeline_id},
+                    }
+                    resp = await client.post(BHASHINI_CONFIG_ENDPOINT, json=payload, headers=headers)
+                    if resp.is_error:
+                        errors.append(
+                            f"pipeline {pipeline_id}: HTTP {resp.status_code}: {self._error_text(resp)}"
+                        )
+                        continue
+                    config = resp.json()
+                    break
+
+                if config is None:
+                    raise RuntimeError("Bhashini pipeline configuration failed: " + " | ".join(errors))
+
+                endpoint = config.get("pipelineInferenceAPIEndPoint") or {}
+                configs = config.get("pipelineResponseConfig") or []
+                service_id = None
+                for task in configs:
+                    for item in task.get("config", []):
+                        lang = item.get("language", {})
+                        if item.get("serviceId") and (
+                            not lang
+                            or (lang.get("sourceLanguage") == source and lang.get("targetLanguage") == target_language)
+                        ):
+                            service_id = item["serviceId"]
+                            break
+                    if service_id:
+                        break
+                if not service_id:
+                    raise RuntimeError("Bhashini returned no translation service for en->" + target_language)
+
                 compute_headers = {"Content-Type": "application/json"}
+                inference_key = endpoint.get("inferenceApiKey") or {}
                 if self.inference_api_key:
                     compute_headers["Authorization"] = self.inference_api_key
-                elif inference_header.get("name") and inference_header.get("value"):
-                    compute_headers[inference_header["name"]] = inference_header["value"]
+                elif inference_key.get("name") and inference_key.get("value"):
+                    compute_headers[inference_key["name"]] = inference_key["value"]
+                else:
+                    raise RuntimeError("Bhashini inference API key is not configured.")
+
                 payload = {
                     "pipelineTasks": [{
                         "taskType": "translation",
                         "config": {
-                            "language": {"sourceLanguage": "en", "targetLanguage": target_language},
+                            "language": {"sourceLanguage": source, "targetLanguage": target_language},
                             "serviceId": service_id,
                         },
                     }],
                     "inputData": {"input": [{"source": t} for t in texts]},
                 }
-                resp = await client.post(compute_url or BHASHINI_PIPELINE_ENDPOINT, json=payload, headers=compute_headers)
-                resp.raise_for_status()
-                data = resp.json()
-                outputs = data["pipelineResponse"][0]["output"]
+                compute_url = endpoint.get("callbackUrl") or BHASHINI_PIPELINE_ENDPOINT
+                resp = await client.post(compute_url, json=payload, headers=compute_headers)
+                if resp.is_error:
+                    raise RuntimeError(
+                        f"Bhashini inference failed: HTTP {resp.status_code}: {self._error_text(resp)}"
+                    )
+                outputs = resp.json().get("pipelineResponse", [{}])[0].get("output", [])
+                if len(outputs) != len(texts):
+                    raise RuntimeError("Bhashini returned an unexpected number of translations.")
                 return [o["target"] for o in outputs]
         except Exception as exc:
             logger.warning(f"Bhashini call failed: {exc}. Falling back to dictionary provider.")
