@@ -1,291 +1,701 @@
-> **Which implementation is "live"? (added 2026-09)**
-> This folder contains two implementations. **The root-level microservice
-> (`main.py`, `embeddings.py`, `bm25_index.py`, `graph.py`, `retrieval.py`,
-> `ingest.py`) is the one being deployed to Render/Vercel and is under
-> active maintenance.** The `app/` package below (with `scripts/ingest.py`,
-> `pipeline.py`, the classification/jurisdiction/safety modules) was an
-> earlier, heavier design for local/GPU-less prototyping and is **not**
-> currently wired into deployment — most of this README describes `app/`,
-> not the root service. To run the live pipeline:
-> ```bash
-> cd ip_sakti_rag
-> pip install -r requirements.txt
-> cp .env.example .env   # fill in LLM_API_KEY, QDRANT_*, NEO4J_*, MONGODB_URI
-> python -m ingest        # extracts data/documents/*.pdf, embeds only new/changed chunks, upserts to Qdrant, and persists processed chunks for BM25
-> uvicorn main:app --reload --port 8001   # local dev; Render start command: uvicorn main:app --host 0.0.0.0 --port $PORT
-> ```
-> If you want to migrate the safety/citation-validation/classification logic
-> from `app/` onto the root service later, that's a deliberate follow-up
-> task, not something silently merged here.
+# 🧠 IP-SAKTI Sahayak — RAG Engine
 
-# IP-SAKTI RAG Engine
+> **Standalone FastAPI Retrieval-Augmented Generation service for evidence-grounded IP, AYUSH and regulatory guidance.**
 
-A standalone, modular **Retrieval-Augmented Generation** layer for **IP-SAKTI Sahayak**
-(Multilingual RAG assistant for IP & regulatory guidance in Ayurveda).
-
-This package is built to sit _behind_ your existing React frontend (`/frontend`) and the
-FastAPI backend you are writing yourself. It does **not** touch or redesign the frontend.
-It only implements the "brain": ingestion → hybrid retrieval → grounded generation →
-citation/safety validation → structured output.
-
-It was built by inspecting `Jidnyasa-P/IP-Sakti`:
-
-- `frontend/src/types.ts` — the exact TypeScript contracts (`Citation`, `ConfidenceMetric`,
-  `StructuredChatMessage`, `ProductAnalysisResult`, `IPRNavigatorResult`, `TKABSResult`, …)
-- `server.ts` — the existing (prototype) Express routes: `/api/chat`, `/api/chat/stream`,
-  `/api/products/analyze`, `/api/ipr/analyze`, `/api/abs/analyze` / `/api/tk-abs/analyze`,
-  `/api/research/search`, `/api/rag/documents`, `/api/rag/telemetry`, `/api/translate`
-- `server/rag/retrieval.ts` — the existing hybrid BM25 + "semantic" fusion + intent
-  detection prototype logic (currently a stub without real embeddings/Qdrant)
-- `scripts/ingest_documents.py` — the existing ingestion stub
-
-**This package reimplements those same ideas in Python, for real**, with actual
-multilingual embeddings, Qdrant vector search, BM25, optional re-ranking, optional
-Neo4j, grounded Gemini generation, citation validation and safe abstention — and it
-returns a response shape that is a superset of the frontend's `StructuredChatMessage`
-so your FastAPI layer can pass it straight through.
+The `ip_sakti_rag` service is the knowledge and reasoning layer of IP-SAKTI Sahayak. It receives RAG-backed requests from the application backend, retrieves relevant indexed evidence, enriches the context with graph information when enabled, generates a grounded result, and exposes citations/confidence-related information to the application layer.
 
 ---
 
-## 1. Folder structure
+## ✨ Start Here
 
+<p align="center">
+  <strong>Retrieve authoritative evidence before generating an answer.</strong><br/>
+  Hybrid retrieval • Qdrant • BM25 • Neo4j • Grounded generation • Safety handling
+</p>
+
+### 🔗 Service Relationship
+
+```text
+React Frontend
+      │
+      ▼
+FastAPI Backend
+      │
+      ▼
+ip_sakti_rag
+      │
+      ├── Qdrant
+      ├── BM25
+      ├── Neo4j
+      ├── embedding service
+      └── configured LLM
 ```
+
+The RAG service is normally **not called directly by the browser**. The backend acts as the application gateway.
+
+---
+
+## 🎯 Responsibilities
+
+The service handles the RAG-backed parts of the application, including:
+
+- conversational evidence retrieval
+- jurisdiction-aware scope handling
+- hybrid semantic + lexical retrieval
+- graph-context enrichment
+- grounded response generation
+- confidence/safety handling
+- citation-oriented response data
+- product analysis
+- IPR analysis
+- Traditional Knowledge / ABS analysis
+- research/document search
+- attachment context extraction
+- RAG telemetry
+
+---
+
+## 🏗️ Current Architecture
+
+```text
+                       Query
+                         │
+                         ▼
+               Language / Scope Boundary
+                         │
+                         ▼
+                  Scope Guard
+                         │
+                         ▼
+              Hybrid Retrieval Layer
+                 ┌───────┴────────┐
+                 │                │
+              Qdrant            BM25
+            semantic             lexical
+                 │                │
+                 └───────┬────────┘
+                         ▼
+                   Score Fusion
+                         │
+                         ▼
+                  Graph Enrichment
+                       Neo4j
+                         │
+                         ▼
+                 Grounded Generator
+                         │
+                         ▼
+               Citation / Confidence
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+          Answer                    Safe handling
+              │                     │
+              ▼                     ▼
+          Backend               Expert workflow
+```
+
+---
+
+## 🔎 Hybrid Retrieval
+
+The current retrieval implementation combines:
+
+### Qdrant semantic retrieval
+
+Queries are embedded into the same **384-dimensional vector space** used by the indexed corpus.
+
+The deployed service can use a remote embedding service so that the RAG process does not need to load the local embedding model into its Render runtime.
+
+Configuration:
+
+```env
+EMBEDDING_SERVICE_URL=
+EMBEDDING_SERVICE_TOKEN=
+```
+
+### BM25 lexical retrieval
+
+The service also builds an in-memory BM25 index from processed chunks.
+
+This provides lexical matching for exact statutory terms, sections, named authorities and other wording-sensitive queries.
+
+### Score fusion
+
+The retrieval layer combines semantic and lexical relevance before final ordering.
+
+The current implementation uses a weighted fusion with semantic relevance weighted above lexical relevance.
+
+---
+
+## 🕸️ Neo4j Graph Context
+
+Neo4j can enrich retrieved evidence with graph relationships.
+
+Configuration:
+
+```env
+NEO4J_ENABLED=true
+NEO4J_URI=
+NEO4J_USERNAME=
+NEO4J_PASSWORD=
+```
+
+If graph configuration is unavailable, the rest of the RAG pipeline can continue without graph enrichment.
+
+---
+
+## 🧠 Generation
+
+The generation layer is provider-configurable.
+
+Relevant settings:
+
+```env
+LLM_PROVIDER=
+LLM_API_KEY=
+LLM_MODEL=
+```
+
+The code supports Gemini and Groq paths, with a deterministic evidence-based fallback when a live generation provider is unavailable.
+
+The configured Render deployment can use Groq for generation.
+
+### Offline fallback
+
+If live LLM generation is unavailable, the service can construct a deterministic evidence summary from retrieved chunks rather than returning an empty response.
+
+This is intended as a resilience mechanism, not as a substitute for validating a real legal/regulatory opinion.
+
+---
+
+## 🌐 Bhashini Language Boundary
+
+The RAG pipeline supports multilingual language handling through Bhashini.
+
+For a non-English selected language, the intended flow is:
+
+```text
+Selected-language query
+          ↓
+     Bhashini → English
+          ↓
+ Scope / retrieval / generation
+          ↓
+      English result
+          ↓
+ Bhashini → selected language
+          ↓
+Localized answer
+```
+
+The service configuration uses:
+
+```env
+TRANSLATION_PROVIDER=bhashini
+BHASHINI_USER_ID=
+BHASHINI_UDYAT_API_KEY=
+BHASHINI_INFERENCE_API_KEY=
+```
+
+The legacy `BHASHINI_ULCA_API_KEY` variable remains accepted for compatibility.
+
+Citation markers are handled so that translation does not unintentionally alter their numbering.
+
+---
+
+## 🛡️ Safety Pipeline
+
+The RAG service includes safety-oriented components under:
+
+```text
+app/safety/
+```
+
+These include:
+
+- scope guarding
+- abstention handling
+- confidence calculation
+- citation validation
+
+The scope guard considers the selected jurisdiction and can reject queries that are outside the intended scope or contain unsafe instruction patterns.
+
+The service can return a low-confidence/safe response when indexed evidence is insufficient.
+
+---
+
+## 📚 Knowledge Corpus
+
+The repository includes a document corpus under:
+
+```text
+data/documents/
+```
+
+Representative sources include:
+
+- IP India Patents
+- IP India Trade Marks
+- Designs
+- Copyright
+- GI
+- CDSCO Drugs and Cosmetics material
+- New Drugs and Clinical Trials
+- Cosmetics Rules
+- FSSAI Ayurveda-Aahar
+- National Biodiversity Authority material
+- PPV&FR material
+- WIPO treaties
+- CBD / Nagoya Protocol
+- DPDP material
+- other indexed regulatory documents
+
+Processed artifacts are stored under:
+
+```text
+data/processed/
+```
+
+Important files include:
+
+```text
+chunks.jsonl
+documents.jsonl
+embedding_progress.json
+ingestion_progress.json
+ingestion_state.json
+```
+
+---
+
+## 🗃️ Document Ingestion
+
+The ingestion code is located under:
+
+```text
+scripts/
+```
+
+and:
+
+```text
+app/ingestion/
+```
+
+Typical ingestion workflow:
+
+```text
+PDF / source document
+       ↓
+Text extraction
+       ↓
+Chunking
+       ↓
+Metadata assignment
+       ↓
+Embedding
+       ↓
+Qdrant indexing
+       ↓
+Processed JSONL artifacts
+       ↓
+BM25 index at service startup
+```
+
+Before re-ingesting or replacing the corpus, make sure the embedding model/vector dimension remains compatible with the existing Qdrant collection.
+
+---
+
+## 📎 Attachment Context
+
+The service exposes:
+
+```text
+POST /api/attachment/context
+```
+
+Supported input types include:
+
+- PDF
+- DOCX
+- TXT
+- MD
+- CSV
+- JSON
+- common images
+
+### Text documents
+
+PDF and DOCX text is extracted locally.
+
+### Images
+
+When the configured Groq multimodal path is available, image content can be interpreted to extract relevant:
+
+- readable text
+- labels
+- ingredients
+- claims
+- dates
+- numbers
+- tables
+- other visible facts
+
+The image analyzer is instructed not to invent unreadable details.
+
+---
+
+## 🔌 API Endpoints
+
+### Health
+
+```text
+GET /api/health
+```
+
+### Chat
+
+```text
+POST /api/chat
+```
+
+### Attachments
+
+```text
+POST /api/attachment/context
+```
+
+### Analysis
+
+```text
+POST /api/products/analyze
+POST /api/ipr/analyze
+POST /api/abs/analyze
+POST /api/tk-abs/analyze
+```
+
+### Research
+
+```text
+GET /api/research/search
+GET /api/rag/documents
+```
+
+### Documents
+
+```text
+GET /api/documents/{document_id}
+GET /api/documents/{document_id}/source
+```
+
+### Telemetry
+
+```text
+GET /api/rag/telemetry
+```
+
+### Conversation support
+
+```text
+DELETE /api/conversations/{conversation_id}
+POST   /api/conversations/{conversation_id}/feedback
+```
+
+---
+
+## 📁 Project Structure
+
+```text
 ip_sakti_rag/
-├── app/
-│   ├── config.py                # env-driven settings (pydantic-settings)
-│   ├── schemas.py                # Pydantic models — the structured contract
-│   ├── language.py               # language + intent detection (en/hi/mr)
-│   ├── classification.py         # product classification (5 categories)
-│   ├── jurisdiction.py           # India / export / PCT jurisdiction detection
-│   ├── ingestion/
-│   │   ├── extract.py            # PDF/HTML/TXT extraction
-│   │   ├── chunker.py            # legal-aware (section/clause) chunking
-│   │   ├── metadata.py           # metadata + versioning schema, doc registry
-│   │   └── embed_and_index.py    # embeddings → Qdrant + BM25 index build
-│   ├── retrieval/
-│   │   ├── bm25_index.py         # BM25 lexical index (rank_bm25)
-│   │   ├── vector_index.py       # Qdrant wrapper (local file-mode or cloud)
-│   │   ├── reranker.py           # optional cross-encoder re-ranking
-│   │   ├── graph.py              # optional Neo4j knowledge-graph context
-│   │   └── hybrid.py             # fusion of BM25 + vector + rerank + filters
-│   ├── generation/
-│   │   ├── prompts.py            # grounded-generation system prompt
-│   │   ├── llm_client.py         # pluggable LLM client (Gemini free tier + offline fallback)
-│   │   └── grounded_generator.py # builds evidence context, calls LLM, parses answer
-│   ├── safety/
-│   │   ├── citation_validator.py # every cited claim must map to a retrieved chunk
-│   │   ├── confidence.py         # confidence scoring
-│   │   └── abstention.py         # safe abstention + expert escalation logic
-│   └── pipeline.py               # IPSaktiRAG — the single class your FastAPI backend calls
-├── data/
-│   ├── documents/                # put official source PDFs/HTML/TXT here
-│   ├── processed/                # chunked+metadata JSONL produced by ingestion
-│   └── qdrant_local/             # local on-disk Qdrant storage (free, no server needed)
-├── scripts/
-│   ├── ingest.py                 # CLI: run the full ingestion pipeline
-│   └── test_queries.py           # CLI: run the sample test queries end-to-end
-├── tests/
-│   └── sample_queries.json
+│
+├── main.py
+├── README.md
 ├── requirements.txt
-└── .env.example
+├── requirements-server.txt
+├── .env.example
+│
+├── app/
+│   ├── classification.py
+│   ├── config.py
+│   ├── embeddings.py
+│   ├── jurisdiction.py
+│   ├── language.py
+│   ├── pipeline.py
+│   ├── schemas.py
+│   │
+│   ├── database/
+│   │   └── mongo.py
+│   │
+│   ├── generation/
+│   │   ├── grounded_generator.py
+│   │   ├── llm_client.py
+│   │   └── prompts.py
+│   │
+│   ├── ingestion/
+│   │   ├── chunker.py
+│   │   ├── embed_and_index.py
+│   │   ├── extract.py
+│   │   └── metadata.py
+│   │
+│   ├── retrieval/
+│   │   ├── graph.py
+│   │   ├── hybrid.py
+│   │   ├── reranker.py
+│   │   ├── tkdl_connector.py
+│   │   └── vector_index.py
+│   │
+│   ├── safety/
+│   │   ├── abstention.py
+│   │   ├── citation_validator.py
+│   │   ├── confidence.py
+│   │   └── scope_guard.py
+│   │
+│   └── translation/
+│       └── bhashini_client.py
+│
+├── data/
+│   ├── documents/
+│   └── processed/
+│
+├── scripts/
+│   ├── ingest.py
+│   ├── download_static_sources.py
+│   ├── ingestion_report.py
+│   └── test_queries.py
+│
+├── docs/
+│   └── SOURCE_ACQUISITION_GUIDE.md
+│
+└── tests/
+    └── sample_queries.json
 ```
 
 ---
 
-## 2. How this maps onto your existing frontend / routes
+## ⚙️ Configuration
 
-| Frontend needs (from `server.ts` / `types.ts`)                  | RAG module call                                      |
-| --------------------------------------------------------------- | ---------------------------------------------------- |
-| `POST /api/chat`, `/api/chat/stream` → `StructuredChatMessage`  | `rag.answer_query(query, language, conversation_id)` |
-| `POST /api/products/analyze` → `ProductAnalysisResult`          | `rag.analyze_product(product_info)`                  |
-| `POST /api/ipr/analyze` → `IPRNavigatorResult`                  | `rag.analyze_ipr(ipr_query)`                         |
-| `POST /api/abs/analyze` / `/api/tk-abs/analyze` → `TKABSResult` | `rag.analyze_tk_abs(tk_query)`                       |
-| `GET /api/research/search` → chunk/document search              | `rag.search_documents(query, filters)`               |
-| `GET /api/rag/documents`                                        | `rag.list_documents(filters)`                        |
-| `GET /api/rag/telemetry`                                        | `rag.get_telemetry()`                                |
+Copy:
 
-Every method returns **plain JSON-serialisable dicts** (via `.model_dump()` on the
-Pydantic schemas in `app/schemas.py`), so your FastAPI backend can do:
-
-```python
-from app.pipeline import IPSaktiRAG
-
-rag = IPSaktiRAG()          # loaded once at startup
-
-@app.post("/api/chat")
-async def chat(payload: ChatRequest):
-    result = rag.answer_query(
-        query=payload.query,
-        language=payload.language,
-        conversation_id=payload.conversation_id,
-    )
-    return result   # matches StructuredChatMessage + retrieval_metadata
+```text
+ip_sakti_rag/.env.example → ip_sakti_rag/.env
 ```
 
-The core structured object (superset of what the task asked for) is:
+### LLM
 
-```json
-{
-  "query": "...",
-  "language": "en",
-  "product_classification": null,
-  "jurisdiction": ["India"],
-  "intent": "IPR_PATENTABILITY",
-  "answer": "...",
-  "citations": [ { "index": 1, "chunk_id": "...", "document_id": "...", "title": "...", "authority": "...", "section": "...", "source": "...", "excerpt": "...", "page": 3 } ],
-  "evidence": [ { "chunk_id": "...", "chunk_text": "...", "score": 0.81, ... } ],
-  "confidence": { "level": "Moderate", "score": 0.52, "reasons": ["..."] },
-  "needs_clarification": false,
-  "needs_expert": false,
-  "relevant_considerations": ["..."],
-  "recommended_next_steps": ["..."],
-  "disclaimer": "This is informational guidance, not legal advice. Consult a registered patent agent / regulatory affairs specialist for filings."
-}
+```env
+LLM_PROVIDER=groq
+LLM_API_KEY=
+LLM_MODEL=
 ```
+
+The provider is configurable; use the model appropriate for the selected provider.
+
+### Embedding service
+
+```env
+EMBEDDING_SERVICE_URL=
+EMBEDDING_SERVICE_TOKEN=
+EMBEDDING_SERVICE_TIMEOUT=120
+```
+
+### Qdrant
+
+```env
+QDRANT_URL=
+QDRANT_API_KEY=
+QDRANT_COLLECTION=ip_sakti_chunks
+```
+
+### Neo4j
+
+```env
+NEO4J_ENABLED=true
+NEO4J_URI=
+NEO4J_USERNAME=
+NEO4J_PASSWORD=
+```
+
+### Bhashini
+
+```env
+TRANSLATION_PROVIDER=bhashini
+BHASHINI_USER_ID=
+BHASHINI_UDYAT_API_KEY=
+BHASHINI_INFERENCE_API_KEY=
+```
+
+### Service protection
+
+```env
+RAG_SERVICE_SHARED_SECRET=
+```
+
+If configured, callers must send the matching internal secret.
+
+### TKDL
+
+The current configuration keeps:
+
+```env
+TKDL_ENABLED=false
+```
+
+Do not enable it without an authorized access mechanism.
 
 ---
 
-## 3. Local setup
+## 🛠️ Local Development
+
+### Prerequisites
+
+- Python 3.12+
+- Qdrant
+- configured embedding service
+- configured LLM provider
+- Neo4j if graph enrichment is required
+- Bhashini credentials if multilingual live translation is required
+
+### Install
 
 ```bash
 cd ip_sakti_rag
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+
+python -m venv .venv
+```
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the full local environment:
+
+```bash
 pip install -r requirements.txt
-
-cp .env.example .env
-# Fill in LLM_API_KEY (free tier) — optional. Without it the module runs in
-# "offline grounded synthesis" mode (evidence-templated answer, no LLM cost/key needed).
 ```
 
-### 3.1 Acquiring source documents (do this manually, per document)
-
-See **`docs/SOURCE_ACQUISITION_GUIDE.md`** for the full authority-by-authority table
-(IP India, NBA, CDSCO/AYUSH, FSSAI, Copyright Office, PPV&FRA, WIPO, CBD, MeitY) with
-exact click-paths for each Act/Rule/Treaty this problem statement now covers. Summary
-of the rules that guide this step:
-
-- **Only download from the official regulator's own site.** Never substitute a
-  law-firm blog, Wikipedia, or a coaching-site "bare act" copy — the exact wording,
-  section numbers, and amendment dates matter for citation precision.
-- **Static Acts/Rules/Regulations published as PDFs are fine to fetch** (via browser
-  or the helper script below) — this isn't "scraping" in the risky sense, it's
-  fetching a public government publication. **Don't** scrape live search portals
-  (patent/trademark search databases, court databases) — they change constantly,
-  aren't meant for bulk extraction, and often sit behind ToS/anti-bot protections.
-- **Never fabricate or guess a direct PDF URL.** Government PDF links rotate/break
-  often; always record the _page you found it on_, not a constructed URL.
-- **Fill in `manifest.json` yourself**, reading title/authority/dates directly off
-  the document — the ingestion pipeline deliberately refuses to guess this metadata
-  (see `app/ingestion/metadata.py`).
-- **`scripts/download_static_sources.py`** is a _helper_, not a guarantee — some
-  government sites block generic user-agents or require a browser session, so treat
-  any failure as "download this one manually" rather than a bug to chase.
-
-### 3.2 TKDL — what you can and can't do
-
-TKDL access is currently restricted to 14 national/regional patent offices under
-bilateral non-disclosure access agreements (examiners only, search/examination
-purposes only). A 2022 Cabinet decision approved widening access via a **paid
-subscription model, phased in** — there is no public API or bulk dataset.
-
-- This module **never** scrapes, reconstructs, or invents TKDL content — see
-  `app/retrieval/tkdl_connector.py`, which is a disabled-by-default placeholder.
-- If your institution obtains authorized TKDL access later, implement the real
-  client call inside that file; nothing else in the pipeline needs to change.
-- Until then, the system correctly does what it should: it tells the user TK
-  prior-art needs to be checked via authorized TKDL access, and sets `needs_expert`.
-- Optional, clearly-labeled substitute: a "classical-text awareness" flag built from
-  genuinely public-domain digitized classical texts (e.g. NAMASTE/NIIMH, CCRAS
-  publications) — see the `tkdl_connector.py` docstring. This must never be
-  presented to a user as TKDL search; it's a much weaker "this might overlap with
-  known classical literature, get it checked" heuristic.
-
-### 3.3 Put source documents in `data/documents/`
-
-Once you have real files with verified metadata, drop them into `data/documents/`
-and fill in `data/documents/manifest.json` (copy `manifest.example.json`, which now
-includes an entry per document type this expanded problem statement covers — Patents
-Act, 2024 Patent Rules, Trade Marks Act, Designs Act, GI Act, Copyright Act, PPV&FR
-Act, Biological Diversity Act/Amendment/2024 Rules, Drugs and Cosmetics Act, Drugs and
-Magic Remedies Act, FSSAI Ayurveda-Aahar Regulations, DPDP Act 2023, PCT, Madrid/Hague,
-Budapest Treaty, WIPO GRATK Treaty, Nagoya Protocol — most with `"url"` left as
-`"VERIFY-AND-FILL"` where I could not confirm a stable official link myself; fill
-those in only after you've actually located and read the document).
-Supported formats: `.pdf`, `.html`, `.txt`.
-
-### 3.4 Run ingestion
+### Run
 
 ```bash
-python scripts/ingest.py
+uvicorn main:app --reload --port 8001
 ```
 
-This will:
+Health:
 
-1. Extract text from each file in `data/documents/` (`app/ingestion/extract.py`)
-2. Perform legal-aware chunking by Chapter → Section → Clause (`chunker.py`)
-3. Attach/validate metadata (title, authority, jurisdiction, publication/effective date,
-   source URL, version) (`metadata.py`)
-4. Embed each chunk with a free multilingual sentence-transformer model and upsert into
-   a local (file-based, no server) Qdrant collection, plus build a BM25 index
-   (`embed_and_index.py`)
+```text
+http://localhost:8001/api/health
+```
 
-Documents can be re-ingested any time (e.g. when a regulation is amended) — the LLM
-never needs retraining, only the metadata/version fields change (`superseded_by`,
-`effective_date`, `status`).
+---
 
-### 3.5 Test it
+## 🚀 Render / Production Runtime
+
+The production-oriented dependency file is:
+
+```text
+requirements-server.txt
+```
+
+The service can be started with:
 
 ```bash
-python scripts/test_queries.py
+uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-Runs the sample queries in `tests/sample_queries.json` through the full pipeline and
-prints the structured JSON output, including the exact example from the brief:
+The production runtime intentionally avoids unnecessary local ML/ingestion dependencies where possible.
 
-> "Can I patent my new Ayurvedic formulation and export it to Germany?"
-
----
-
-## 4. Design choices for a FREE, GPU-less SIH prototype
-
-| Component       | Choice                                                                                                                                                                            | Why free / light                                                                                                                                                                                                                                                                                      |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embeddings      | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (118MB)                                                                                                             | Runs on CPU, covers en/hi/mr, no API cost                                                                                                                                                                                                                                                             |
-| Vector store    | Qdrant, **local on-disk mode** (`qdrant-client` embedded, no server)                                                                                                              | Zero infra for dev; swap to **Qdrant Cloud free tier (1 GB cluster)** for deployment — verify current limits at qdrant.tech/pricing before relying on them                                                                                                                                            |
-| Lexical search  | `rank_bm25` (pure Python)                                                                                                                                                         | No infra                                                                                                                                                                                                                                                                                              |
-| Re-ranking      | Optional `cross-encoder/ms-marco-MiniLM-L-6-v2` via `sentence-transformers`, gated by `RERANKER_ENABLED`                                                                          | Small, CPU-ok; disable on very low RAM (Render/Railway free tier ~512MB)                                                                                                                                                                                                                              |
-| Knowledge graph | Optional Neo4j (`app/retrieval/graph.py`), gated by `NEO4J_ENABLED`                                                                                                               | Neo4j Aura has a free tier (check current node/relationship caps before depending on it) — module runs fully without it                                                                                                                                                                               |
-| LLM             | Google **Gemini** (`gemini-2.5-flash` / `gemini-2.0-flash`) via free-tier API key, same provider frontend already uses                                                            | Check current Google AI Studio free-tier rate limits before demo day; if unavailable/unset, an **offline grounded synthesis fallback** (`llm_client.py`) builds a templated, citation-grounded answer directly from retrieved chunks — the exact same "resilience" idea already in `server/gemini.ts` |
-| Multilingual UI | `app/language.py` keeps translation modular — plug in Anuvadini/BHASHINI later via a `TranslationProvider` interface                                                              | Doesn't block prototype                                                                                                                                                                                                                                                                               |
-| Deployment      | FastAPI backend (yours) + this module on **Render/Railway free web service** or a single **Hugging Face Space (CPU)**; Qdrant on local disk for demo or Qdrant Cloud free cluster | No GPU, no paid infra required                                                                                                                                                                                                                                                                        |
-
-**Before deployment**, re-check current pricing/limits yourself for whichever of
-Qdrant Cloud, Neo4j Aura, Google AI Studio, and your chosen hosting platform you use —
-free tiers change often and this README should not be treated as pricing truth.
+For Render, configure the environment variables in the service dashboard rather than committing `.env`.
 
 ---
 
-## 5. Safety pipeline (already wired into `pipeline.py`)
+## 🔒 Internal Service Protection
 
-1. **Retrieval** — hybrid BM25 + vector, metadata-filtered by jurisdiction/topic/product type.
-2. **Evidence-grounded generation** — the LLM is instructed to answer _only_ from the
-   retrieved chunk text and to tag every claim with `[n]` matching a citation index.
-   It is never treated as a source of truth on its own.
-3. **Citation validation** (`safety/citation_validator.py`) — every `[n]` tag referenced
-   in the answer must correspond to a citation that was actually retrieved; any citation
-   index the model invents is stripped, logged, and drops the confidence a tier.
-4. **Authority check** — chunk metadata must have a known `authority` from an allow-list
-   before it can back a claim (prevents laundering low-trust text as authoritative).
-5. **Confidence scoring** (`safety/confidence.py`) — combines top fused score, chunk
-   count, and citation-validation pass rate into `High / Moderate / Low / Insufficient evidence`.
-6. **Safe abstention** (`safety/abstention.py`) — below a configurable threshold, the
-   pipeline sets `needs_clarification` or `needs_expert` and returns a hedged answer
-   instead of a confident-sounding guess.
-7. **Disclaimer** — always attached: _"This is informational guidance, not legal
-   advice."_
+The RAG service supports:
+
+```env
+RAG_SERVICE_SHARED_SECRET=
+```
+
+When set, protected endpoints require the matching internal header from the backend.
+
+The health endpoint remains available for service health checks.
 
 ---
 
-## 6. requirements.txt / .env.example
+## 📊 Telemetry
 
-See the accompanying files.
+The service exposes:
+
+```text
+GET /api/rag/telemetry
+```
+
+Telemetry can be used to inspect RAG pipeline behavior and retrieval-related runtime information without exposing internal secrets.
+
+---
+
+## 🧪 Testing & Query Validation
+
+Test utilities are located in:
+
+```text
+tests/
+scripts/test_queries.py
+```
+
+Use the service health endpoint first, then test representative queries across:
+
+- IP
+- AYUSH regulation
+- Traditional Knowledge
+- biodiversity/ABS
+- jurisdiction boundaries
+- low-confidence cases
+- multilingual requests
+
+---
+
+## ⚠️ Operational Notes
+
+### Qdrant compatibility
+
+The indexed Qdrant collection and live query embedding service must use the same vector dimension/model space.
+
+### Corpus persistence
+
+The processed corpus is stored in:
+
+```text
+data/processed/
+```
+
+Production deployments should ensure required processed artifacts are available to the deployed service.
+
+### Neo4j
+
+Graph enrichment is optional. Missing graph configuration should not prevent the core retrieval pipeline from operating.
+
+### Bhashini
+
+Live multilingual translation depends on valid Bhashini credentials and provider availability. The backend/frontend translation path also has local dictionary behavior for supported UI content.
+
+### LLM availability
+
+If the configured live provider fails, the service can fall back to deterministic evidence-based synthesis.
+
+### Legal use
+
+The generated output is decision-support information. Always verify the current official legal/regulatory text before using an answer for filing, compliance or commercial action.
+
+---
+
+## 🔗 Related Documentation
+
+- Root project: `../README.md`
+- Backend: `../backend/README.md`
+- Frontend: `../frontend/README.md`
+- Setup: `../setup_steps.md`
+- Deployment: `../DEPLOYMENT.md`
+- Source acquisition: `docs/SOURCE_ACQUISITION_GUIDE.md`
