@@ -36,7 +36,6 @@ interface ExpertAdvisoryViewProps {
 export const ExpertAdvisoryView: React.FC<ExpertAdvisoryViewProps> = ({ onOpenCitation }) => {
   const { queries, pendingCount, resolvedCount, resolveQuery, refreshQueries } = useExpertAdvisory();
   const { currentUser } = useAuth();
-  const { notifications, unreadCount, markRead, markAllRead, refreshNotifications } = useNotifications();
 
   const [selectedQueryId, setSelectedQueryId] = useState<string>(() => {
     return queries[0]?.id || '';
@@ -81,8 +80,7 @@ export const ExpertAdvisoryView: React.FC<ExpertAdvisoryViewProps> = ({ onOpenCi
   }, []);
 
   useEffect(() => {
-    if (expertSection !== "workspace") return;
-    void refreshNotifications();
+    if (expertSection !== 'workspace') return;
     authFetch('/api/workspace/grievances')
       .then(async (res) => (res.ok ? res.json() : []))
       .then((data) => setExpertGrievances(Array.isArray(data) ? data : []))
@@ -291,48 +289,30 @@ export const ExpertAdvisoryView: React.FC<ExpertAdvisoryViewProps> = ({ onOpenCi
             </div>
 
             <div className="flex border-b border-slate-300 gap-5 overflow-x-auto">
-              <button type="button" onClick={() => setWorkspaceTab('notifications')} className={`pb-3 text-xs font-semibold border-b-2 ${workspaceTab === 'notifications' ? 'border-emerald-700 text-slate-900' : 'border-transparent text-slate-500'}`}>My Notifications ({unreadCount})</button>
+              <button type="button" onClick={() => setWorkspaceTab('notifications')} className={`pb-3 text-xs font-semibold border-b-2 ${workspaceTab === 'notifications' ? 'border-emerald-700 text-slate-900' : 'border-transparent text-slate-500'}`}>My Notifications ({queries.length})</button>
               <button type="button" onClick={() => setWorkspaceTab('grievances')} className={`pb-3 text-xs font-semibold border-b-2 ${workspaceTab === 'grievances' ? 'border-emerald-700 text-slate-900' : 'border-transparent text-slate-500'}`}>My Grievances ({expertGrievances.length})</button>
             </div>
 
-            {workspaceTab === "notifications" && (
-              <div className="space-y-4">
-                <div className="bg-white border border-slate-300 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-                      <Bell className="w-5 h-5 text-emerald-700" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">My Notifications</h2>
-                      <p className="text-xs text-slate-500 mt-1">The same notification inbox shown by the navbar bell.</p>
-                    </div>
+            {workspaceTab === 'notifications' && (
+              <div className="space-y-3">
+                {queries.length === 0 ? (
+                  <div className="py-14 text-center bg-white border border-slate-300 rounded-2xl">
+                    <Bell className="w-8 h-8 mx-auto text-slate-300 mb-3" />
+                    <p className="text-sm font-semibold text-slate-700">No notifications yet.</p>
+                    <p className="text-xs text-slate-400 mt-1">Queries assigned to you will appear here.</p>
                   </div>
-                  <button type="button" onClick={() => void markAllRead()} disabled={unreadCount === 0} className="self-start sm:self-auto text-xs font-semibold px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-300 disabled:opacity-50">Mark all as read</button>
-                </div>
-
-                <div className="space-y-3">
-                  {notifications.length === 0 ? (
-                    <div className="py-14 text-center bg-white border border-slate-300 rounded-2xl">
-                      <Bell className="w-8 h-8 mx-auto text-slate-300 mb-3" />
-                      <p className="text-sm font-semibold text-slate-700">No notifications yet.</p>
-                      <p className="text-xs text-slate-400 mt-1">Account and expert-service updates will appear here.</p>
-                    </div>
-                  ) : notifications.map((item) => (
-                    <div key={item.id} className={`bg-white border rounded-2xl p-5 shadow-sm ${item.is_read ? "border-slate-300" : "border-emerald-300 bg-emerald-50/30"}`}>
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className={`text-sm ${item.is_read ? "font-medium text-slate-800" : "font-bold text-slate-900"}`}>{item.title}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase ${item.is_read ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-800"}`}>{item.is_read ? "Read" : "Unread"}</span>
-                          </div>
-                          <p className="text-xs text-slate-600 mt-2 leading-relaxed">{item.message}</p>
-                        </div>
-                        <span className="text-[10px] text-slate-400 whitespace-nowrap">{item.created_at ? new Date(item.created_at).toLocaleString() : ""}</span>
+                ) : queries.map((q) => (
+                  <button key={q.id} type="button" onClick={() => { setExpertSection('queue'); handleSelectQuery(q); }} className="w-full text-left bg-white border border-slate-300 rounded-2xl p-5 shadow-sm hover:border-emerald-400 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-700">New expert consultation</p>
+                        <p className="text-sm font-semibold text-slate-900 mt-1">{q.query}</p>
                       </div>
-                      {!item.is_read && <button type="button" onClick={() => void markRead(item.id)} className="mt-3 text-[11px] font-semibold text-emerald-800 hover:underline">Mark as read</button>}
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-semibold border ${q.status === 'resolved' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>{q.status === 'resolved' ? 'Resolved' : 'Pending'}</span>
                     </div>
-                  ))}
-                </div>
+                    <p className="text-[10px] text-slate-400 mt-3">{q.created_at ? new Date(q.created_at).toLocaleString() : ''}</p>
+                  </button>
+                ))}
               </div>
             )}
 
