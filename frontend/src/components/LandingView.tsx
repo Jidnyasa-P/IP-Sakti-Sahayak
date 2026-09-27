@@ -280,36 +280,36 @@ export const LandingView: React.FC<LandingViewProps> = ({
         <div className="absolute inset-0 -z-10 bg-white/58 dark:bg-slate-950/64" />
         <div className="max-w-4xl mx-auto">
           <div className="max-w-2xl mb-8">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">Frequently Asked Questions</p>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-serif font-semibold text-slate-950 dark:text-white">Common questions about IP-SAKTI Sahayak</h2>
-            <p className="mt-3 text-sm sm:text-base text-slate-800 dark:text-slate-100 leading-relaxed">Find quick answers about the assistant, jurisdiction modes, expert consultation and the information you provide.</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">{t('landing.faq_label', 'Frequently Asked Questions')}</p>
+            <h2 className="mt-2 text-3xl sm:text-4xl font-serif font-semibold text-slate-950 dark:text-white">{t('landing.faq_title', 'Common questions about IP-SAKTI Sahayak')}</h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-800 dark:text-slate-100 leading-relaxed">{t('landing.faq_subtitle', 'Find quick answers about the assistant, jurisdiction modes, expert consultation and the information you provide.')}</p>
           </div>
 
           <div className="space-y-3">
             {[
               {
-                question: "What can I ask IP-SAKTI Sahayak?",
-                answer: "You can ask about intellectual property, AYUSH regulations, traditional knowledge, biodiversity and related regulatory research. The assistant uses the selected jurisdiction and available authoritative sources to support its response.",
+                question: t('landing.faq_q1', 'What can I ask IP-SAKTI Sahayak?'),
+                answer: t('landing.faq_a1', 'You can ask about intellectual property, AYUSH regulations, traditional knowledge, biodiversity and related regulatory research. The assistant uses the selected jurisdiction and available authoritative sources to support its response.'),
               },
               {
-                question: "What is the difference between Indian and International jurisdiction?",
-                answer: "Indian jurisdiction focuses on Indian statutes, authorities and requirements. International jurisdiction focuses on relevant global frameworks, treaties and foreign intellectual-property or regulatory contexts. Select the mode that matches your question.",
+                question: t('landing.faq_q2', 'What is the difference between Indian and International jurisdiction?'),
+                answer: t('landing.faq_a2', 'Indian jurisdiction focuses on Indian statutes, authorities and requirements. International jurisdiction focuses on relevant global frameworks, treaties and foreign intellectual-property or regulatory contexts. Select the mode that matches your question.'),
               },
               {
-                question: "Can I upload a document or image with my question?",
-                answer: "Yes. Supported documents can be read for relevant text, while supported images can be analyzed for readable text and other material details. The extracted attachment context can then be considered with your question.",
+                question: t('landing.faq_q3', 'Can I upload a document or image with my question?'),
+                answer: t('landing.faq_a3', 'Yes. Supported documents can be read for relevant text, while supported images can be analyzed for readable text and other material details. The extracted attachment context can then be considered with your question.'),
               },
               {
-                question: "What happens when an answer has low confidence?",
-                answer: "The chat can offer expert consultation for low-confidence cases. You can choose an Ayurveda Expert, Legal / IP Expert or Regulatory Affairs Expert so the request is routed according to the selected expert type.",
+                question: t('landing.faq_q4', 'What happens when an answer has low confidence?'),
+                answer: t('landing.faq_a4', 'The chat can offer expert consultation for low-confidence cases. You can choose an Ayurveda Expert, Legal / IP Expert or Regulatory Affairs Expert so the request is routed according to the selected expert type.'),
               },
               {
-                question: "Is the answer a legal opinion or a substitute for professional advice?",
-                answer: "No. IP-SAKTI Sahayak is a decision-support and research tool. Its responses should be checked against the cited sources and, where appropriate, reviewed by a qualified legal, regulatory or domain professional.",
+                question: t('landing.faq_q5', 'Is the answer a legal opinion or a substitute for professional advice?'),
+                answer: t('landing.faq_a5', 'No. IP-SAKTI Sahayak is a decision-support and research tool. Its responses should be checked against the cited sources and, where appropriate, reviewed by a qualified legal, regulatory or domain professional.'),
               },
               {
-                question: "Does the platform support multiple languages?",
-                answer: "Yes. The interface and supported language workflow are designed for multilingual access, with the available language options shown in the application.",
+                question: t('landing.faq_q6', 'Does the platform support multiple languages?'),
+                answer: t('landing.faq_a6', 'Yes. The interface and supported language workflow are designed for multilingual access, with the available language options shown in the application.'),
               },
             ].map((faq, index) => {
               const isOpen = openFaqIndex === index;
@@ -352,32 +352,32 @@ export const LandingView: React.FC<LandingViewProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 flex items-center justify-center">
               <Users className="w-6 h-6" />
             </div>
-            <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">About Us</p>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-serif font-semibold text-slate-950 dark:text-white">Making complex IP & AYUSH information easier to navigate.</h2>
+            <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">{t('landing.about_label', 'About Us')}</p>
+            <h2 className="mt-2 text-3xl sm:text-4xl font-serif font-semibold text-slate-950 dark:text-white">{t('landing.about_title', 'Making complex IP & AYUSH information easier to navigate.')}</h2>
           </div>
 
           <div className="space-y-5 text-sm sm:text-base text-slate-900 dark:text-slate-100 leading-relaxed">
             <p className="font-bold text-emerald-900 dark:text-emerald-300">
-              IP-SAKTI Sahayak is a decision-support platform designed for AYUSH innovators, researchers, practitioners, startups and institutions working with intellectual property and regulatory questions.
+              {t('landing.about_p1', 'IP-SAKTI Sahayak is a decision-support platform designed for AYUSH innovators, researchers, practitioners, startups and institutions working with intellectual property and regulatory questions.')}
             </p>
             <p className="font-bold text-emerald-900 dark:text-emerald-300">
-              The platform brings together AI-assisted question answering, product analysis, IPR navigation, traditional-knowledge research and statutory information in one workspace. Its goal is to reduce the friction between discovering relevant information and understanding how that information applies to a real-world idea or product.
+              {t('landing.about_p2', 'The platform brings together AI-assisted question answering, product analysis, IPR navigation, traditional-knowledge research and statutory information in one workspace. Its goal is to reduce the friction between discovering relevant information and understanding how that information applies to a real-world idea or product.')}
             </p>
             <div className="grid sm:grid-cols-3 gap-3 pt-2">
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <Scale className="w-5 h-5 text-emerald-700 mb-2" />
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">Source-aware</p>
-                <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">Designed around authoritative knowledge.</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{t('landing.about_source_title', 'Source-aware')}</p>
+                <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">{t('landing.about_source_desc', 'Designed around authoritative knowledge.')}</p>
               </div>
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <Globe2 className="w-5 h-5 text-emerald-700 mb-2" />
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">Multilingual</p>
-                <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">Built for accessible research across languages.</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{t('landing.about_multi_title', 'Multilingual')}</p>
+                <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">{t('landing.about_multi_desc', 'Built for accessible research across languages.')}</p>
               </div>
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <FileText className="w-5 h-5 text-emerald-700 mb-2" />
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">Decision support</p>
-                <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">Helps users investigate before they act.</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{t('landing.about_decision_title', 'Decision support')}</p>
+                <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">{t('landing.about_decision_desc', 'Helps users investigate before they act.')}</p>
               </div>
             </div>
           </div>
