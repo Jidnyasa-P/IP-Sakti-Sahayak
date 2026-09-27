@@ -85,43 +85,33 @@ class IPSaktiRAG:
     # ------------------------------------------------------------------
     def answer_query(self, query: str, language: str | None = None, conversation_id: str | None = None, jurisdiction: str | None = None, attachment_context: str | None = None) -> dict:
         started = datetime.now(timezone.utc)
+        selected_language = language if language in {
+            "en", "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai",
+            "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
+        } else "en"
 
-        # Enforce the selected India/International mode before any retrieval
-        # or generation. The frontend check is only a UX guard; this is the
-        # authoritative server-side check.
+        # Keep retrieval/generation in English. Bhashini is the language boundary:
+        # selected language -> English for RAG, then English -> selected language
+        # for the user-facing response. This prevents mixed-language legal answers.
+        working_query = query
+        if selected_language != "en":
+            try:
+                working_query = bhashini_translate_many([query], selected_language, "en")[0]
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"Bhashini query translation failed: {exc}")
+
         selected_jurisdiction = (jurisdiction or "india").strip().lower()
         if selected_jurisdiction not in {"india", "international"}:
             selected_jurisdiction = "india"
 
-        supported_languages = {
-            "en", "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok",
-            "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
-            "ta", "te", "ur",
-        }
-        safe_language = language if language in supported_languages else "en"
-        attachment_context = (attachment_context or "").strip()[:16000]
-        working_query = query
-        if attachment_context:
-            working_query = f"{query}\n\n[USER ATTACHMENT CONTEXT]\n{attachment_context}"
-
-        # BHASHINI is used at the RAG boundary: user language -> English for
-        # scope checking, classification, retrieval and generation. Source
-        # documents/citations remain in their authoritative form.
-        retrieval_query = working_query
-        if safe_language != "en" and settings.translation_provider.strip().lower() == "bhashini":
-            try:
-                retrieval_query = bhashini_translate_many([working_query], safe_language, "en")[0]
-            except Exception as exc:
-                print(f"[bhashini] Input translation failed; using original query: {type(exc).__name__}: {exc}")
-
-        scope = check_scope(retrieval_query, selected_jurisdiction)
+        scope = check_scope(working_query, selected_jurisdiction)
         if not scope.allowed:
             blocked_answer = scope.message or "This query does not match the selected jurisdiction."
-            if safe_language != "en" and settings.translation_provider.strip().lower() == "bhashini":
+            if selected_language != "en":
                 try:
-                    blocked_answer = bhashini_translate_many([blocked_answer], "en", safe_language)[0]
-                except Exception as exc:
-                    print(f"[bhashini] Scope-message translation failed: {type(exc).__name__}: {exc}")
+                    blocked_answer = bhashini_translate_many([blocked_answer], "en", selected_language)[0]
+                except Exception:
+                    pass
             blocked_confidence = ConfidenceMetric(
                 level="Insufficient evidence",
                 score=0.0,
@@ -129,7 +119,7 @@ class IPSaktiRAG:
             )
             out = RAGResponse(
                 query=query,
-                language=safe_language,
+                language=selected_language,
                 product_classification=None,
                 jurisdiction=[selected_jurisdiction],
                 intent="SCOPE_GUARD_BLOCKED",
@@ -147,16 +137,21 @@ class IPSaktiRAG:
             out["conversation_id"] = conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
             out["retrieval_metadata"] = {
                 "intent": "SCOPE_GUARD_BLOCKED",
-                "language": safe_language,
+                "language": selected_language,
+                "source_language": selected_language,
                 "latency_ms": int((datetime.now(timezone.utc) - started).total_seconds() * 1000),
             }
             return out
 
-        jurisdictions = detect_jurisdiction(retrieval_query)
-        classification = classify_product(retrieval_query)
+        jurisdictions = detect_jurisdiction(working_query)
+        attachment_context = (attachment_context or "").strip()[:16000]
+        rag_query = working_query
+        if attachment_context:
+            rag_query = f"{working_query}\n\n[USER ATTACHMENT CONTEXT]\n{attachment_context}"
+        classification = classify_product(rag_query)
 
         retrieval = self.retriever.retrieve(
-            query=retrieval_query,
+            query=rag_query,
             language="en",
             jurisdiction_filter="International" if selected_jurisdiction == "international" else "India",
             top_k=settings.top_k,
@@ -164,7 +159,7 @@ class IPSaktiRAG:
 
         graph_context = self.graph.get_context([classification.category])
         generated = generate_grounded_answer(
-            query=retrieval_query,
+            query=rag_query,
             language="en",
             chunks=retrieval.top_chunks,
             graph_context=graph_context.__dict__,
@@ -184,28 +179,38 @@ class IPSaktiRAG:
             jurisdiction_count=len(jurisdictions),
         )
         final_answer = apply_abstention_override(validation.cleaned_answer, needs_clarification)
-        relevant_considerations = generated.get("relevant_considerations", []) or []
-        recommended_next_steps = generated.get("recommended_next_steps", []) or []
+        relevant_considerations = generated.get("relevant_considerations", [])
+        recommended_next_steps = generated.get("recommended_next_steps", [])
         disclaimer = get_disclaimer()
 
-        if safe_language != "en" and settings.translation_provider.strip().lower() == "bhashini":
-            texts_to_translate = [final_answer, *[str(x) for x in relevant_considerations], *[str(x) for x in recommended_next_steps], disclaimer]
+        if selected_language != "en":
             try:
-                translated = bhashini_translate_many(texts_to_translate, "en", safe_language)
-                final_answer = translated[0]
-                offset = 1
-                relevant_considerations = translated[offset:offset + len(relevant_considerations)]
-                offset += len(relevant_considerations)
-                recommended_next_steps = translated[offset:offset + len(recommended_next_steps)]
+                # Protect citation markers so NMT cannot alter [1], [2], etc.
+                import re
+                marker_pattern = re.compile(r"\[(\d+)\]")
+                protected_answer = marker_pattern.sub(lambda m: f"__IPS_CITATION_{m.group(1)}__", final_answer)
+                translated = bhashini_translate_many(
+                    [protected_answer, *relevant_considerations, *recommended_next_steps, disclaimer],
+                    "en", selected_language,
+                )
+                final_answer = re.sub(
+                    r"__IPS_CITATION_(\d+)__",
+                    lambda m: f"[{m.group(1)}]",
+                    translated[0],
+                )
+                count = len(relevant_considerations)
+                relevant_considerations = translated[1:1 + count]
+                start_steps = 1 + count
+                recommended_next_steps = translated[start_steps:start_steps + len(recommended_next_steps)]
                 disclaimer = translated[-1]
             except Exception as exc:
-                print(f"[bhashini] Output translation failed; keeping English answer: {type(exc).__name__}: {exc}")
+                raise HTTPException(status_code=502, detail=f"Bhashini response translation failed: {exc}")
 
         self._log_telemetry(query, retrieval.latency_ms, confidence, len(retrieval.citations))
 
         response = RAGResponse(
             query=query,
-            language=safe_language,
+            language=selected_language,
             product_classification=(
                 classification.category if classification.category != "Other / Needs Further Review" else None
             ),
@@ -227,7 +232,9 @@ class IPSaktiRAG:
         out["conversation_id"] = conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
         out["retrieval_metadata"] = {
             "intent": retrieval.detected_intent,
-            "language": safe_language,
+            "language": selected_language,
+            "source_language": selected_language,
+            "retrieval_language": "en",
             "latency_ms": int((datetime.now(timezone.utc) - started).total_seconds() * 1000),
         }
         save_chat(out["conversation_id"], query, out)

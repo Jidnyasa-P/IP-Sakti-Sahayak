@@ -11,9 +11,8 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 Language = Literal[
-    "en", "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok",
-    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
-    "ta", "te", "ur",
+    "en", "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai",
+    "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 ]
 ConfidenceLevel = Literal["High", "Moderate", "Low", "Insufficient evidence"]
 

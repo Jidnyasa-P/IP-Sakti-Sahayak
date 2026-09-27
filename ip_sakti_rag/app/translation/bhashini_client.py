@@ -1,9 +1,4 @@
-"""BHASHINI/ULCA neural machine translation client.
-
-The client resolves the translation service for each requested language pair
-and then calls the returned inference endpoint. Credentials are read only
-from the RAG service environment.
-"""
+"""Server-side Bhashini ULCA translation client used by the RAG pipeline."""
 from __future__ import annotations
 
 import httpx
@@ -12,7 +7,9 @@ from app.config import settings
 
 _CONFIG_URL = "https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline"
 _DEFAULT_INFERENCE_URL = "https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
+_PIPELINE_ID = "64392f96daac500b55c543cd"
 
+# Bhashini uses ISO-639 language codes for the pipeline configuration.
 _LANG_CODE = {
     "en": "en", "as": "as", "bn": "bn", "brx": "brx", "doi": "doi",
     "gu": "gu", "hi": "hi", "kn": "kn", "ks": "ks", "kok": "kok",
@@ -22,100 +19,104 @@ _LANG_CODE = {
 }
 
 
-def _normalise_inference_key(value: str) -> str:
-    value = (value or "").strip()
-    return value[7:].strip() if value.lower().startswith("bearer ") else value
+def _language_code(language: str) -> str:
+    return _LANG_CODE.get(language, language)
 
 
-def bhashini_translate_many(
-    texts: list[str],
-    source_lang: str,
-    target_lang: str,
-    timeout: float = 20.0,
-) -> list[str]:
-    if not texts or source_lang == target_lang:
-        return list(texts)
-
-    if source_lang not in _LANG_CODE or target_lang not in _LANG_CODE:
-        raise ValueError(f"Unsupported BHASHINI language pair: {source_lang}->{target_lang}")
-
-    user_id = (settings.bhashini_user_id or "").strip()
-    ulca_key = (settings.bhashini_ulca_api_key or "").strip()
-    inference_key = _normalise_inference_key(settings.bhashini_inference_api_key or "")
-    if not user_id or not ulca_key or not inference_key:
-        raise RuntimeError("BHASHINI_USER_ID, BHASHINI_ULCA_API_KEY and BHASHINI_INFERENCE_API_KEY are required.")
-
-    config_headers = {
-        "userID": user_id,
-        "ulcaApiKey": ulca_key,
+def _get_pipeline_config(client: httpx.Client, source_lang: str, target_lang: str) -> tuple[str, dict]:
+    headers = {
+        "userID": settings.bhashini_user_id or "",
+        "ulcaApiKey": settings.bhashini_ulca_api_key or settings.bhashini_api_key or "",
         "Content-Type": "application/json",
     }
-    config_payload = {
+    payload = {
         "pipelineTasks": [{
             "taskType": "translation",
             "config": {
                 "language": {
-                    "sourceLanguage": _LANG_CODE[source_lang],
-                    "targetLanguage": _LANG_CODE[target_lang],
+                    "sourceLanguage": _language_code(source_lang),
+                    "targetLanguage": _language_code(target_lang),
                 }
             },
-        }]
+        }],
+        "pipelineRequestConfig": {"pipelineId": _PIPELINE_ID},
+    }
+    response = client.post(_CONFIG_URL, headers=headers, json=payload)
+    response.raise_for_status()
+    data = response.json()
+    endpoint = data["pipelineInferenceAPIEndPoint"]
+    configs = data["pipelineResponseConfig"]
+    translation_configs = []
+    for task in configs:
+        for config in task.get("config", []):
+            language = config.get("language", {})
+            if (
+                config.get("serviceId")
+                and language.get("sourceLanguage") == _language_code(source_lang)
+                and language.get("targetLanguage") == _language_code(target_lang)
+            ):
+                translation_configs.append(config)
+    if not translation_configs:
+        # Some Bhashini responses omit language metadata after filtering.
+        for task in configs:
+            for config in task.get("config", []):
+                if config.get("serviceId"):
+                    translation_configs.append(config)
+    if not translation_configs:
+        raise RuntimeError(f"Bhashini returned no translation service for {source_lang}->{target_lang}.")
+    return endpoint.get("callbackUrl") or _DEFAULT_INFERENCE_URL, {
+        "service_id": translation_configs[0]["serviceId"],
+        "inference_key": endpoint.get("inferenceApiKey") or {},
     }
 
-    with httpx.Client(timeout=timeout) as client:
-        config_resp = client.post(_CONFIG_URL, headers=config_headers, json=config_payload)
-        config_resp.raise_for_status()
-        config = config_resp.json()
 
-        endpoint = config.get("pipelineInferenceAPIEndPoint") or {}
-        callback_url = endpoint.get("callbackUrl") or _DEFAULT_INFERENCE_URL
-        returned_key = endpoint.get("inferenceApiKey") or {}
-        returned_value = returned_key.get("value") if isinstance(returned_key, dict) else None
-        if returned_value:
-            inference_key = _normalise_inference_key(str(returned_value))
+def _translate_batch(client: httpx.Client, texts: list[str], source_lang: str, target_lang: str) -> list[str]:
+    if not texts or source_lang == target_lang:
+        return texts
+    compute_url, config = _get_pipeline_config(client, source_lang, target_lang)
+    inference_key = config.get("inference_key") or {}
+    compute_headers = {"Content-Type": "application/json"}
+    if settings.bhashini_inference_api_key:
+        compute_headers["Authorization"] = settings.bhashini_inference_api_key
+    elif inference_key.get("name") and inference_key.get("value"):
+        compute_headers[inference_key["name"]] = inference_key["value"]
+    else:
+        raise RuntimeError("Bhashini inference API key is not configured.")
 
-        response_configs = config.get("pipelineResponseConfig") or []
-        service_id = None
-        for response_group in response_configs:
-            for service_config in response_group.get("config") or []:
-                lang = service_config.get("language") or {}
-                if (
-                    lang.get("sourceLanguage") == _LANG_CODE[source_lang]
-                    and lang.get("targetLanguage") == _LANG_CODE[target_lang]
-                    and service_config.get("serviceId")
-                ):
-                    service_id = service_config["serviceId"]
-                    break
-            if service_id:
-                break
-        if not service_id:
-            raise RuntimeError("BHASHINI returned no translation service for the requested language pair.")
-
-        compute_payload = {
-            "pipelineTasks": [{
-                "taskType": "translation",
-                "config": {
-                    "language": {
-                        "sourceLanguage": _LANG_CODE[source_lang],
-                        "targetLanguage": _LANG_CODE[target_lang],
-                    },
-                    "serviceId": service_id,
+    payload = {
+        "pipelineTasks": [{
+            "taskType": "translation",
+            "config": {
+                "language": {
+                    "sourceLanguage": _language_code(source_lang),
+                    "targetLanguage": _language_code(target_lang),
                 },
-            }],
-            "inputData": {"input": [{"source": text} for text in texts]},
-        }
-        compute_resp = client.post(
-            callback_url,
-            headers={"Authorization": inference_key, "Content-Type": "application/json"},
-            json=compute_payload,
-        )
-        compute_resp.raise_for_status()
-        outputs = compute_resp.json()["pipelineResponse"][0]["output"]
-        translated = [item["target"] for item in outputs]
-        if len(translated) != len(texts):
-            raise RuntimeError("BHASHINI returned an unexpected number of translated outputs.")
-        return translated
+                "serviceId": config["service_id"],
+            },
+        }],
+        "inputData": {"input": [{"source": text} for text in texts]},
+    }
+    response = client.post(compute_url, headers=compute_headers, json=payload)
+    response.raise_for_status()
+    outputs = response.json()["pipelineResponse"][0]["output"]
+    if len(outputs) != len(texts):
+        raise RuntimeError("Bhashini returned an unexpected number of translations.")
+    return [item["target"] for item in outputs]
 
 
-def bhashini_translate(text: str, source_lang: str, target_lang: str, timeout: float = 20.0) -> str:
-    return bhashini_translate_many([text], source_lang, target_lang, timeout=timeout)[0]
+def bhashini_translate(text: str, source_lang: str, target_lang: str, timeout: float = 30.0) -> str:
+    if not text or source_lang == target_lang:
+        return text
+    if not settings.bhashini_user_id or not (settings.bhashini_ulca_api_key or settings.bhashini_api_key):
+        raise RuntimeError("BHASHINI_USER_ID and BHASHINI_ULCA_API_KEY are not configured.")
+    with httpx.Client(timeout=timeout) as client:
+        return _translate_batch(client, [text], source_lang, target_lang)[0]
+
+
+def bhashini_translate_many(texts: list[str], source_lang: str, target_lang: str, timeout: float = 30.0) -> list[str]:
+    if not texts or source_lang == target_lang:
+        return texts
+    if not settings.bhashini_user_id or not (settings.bhashini_ulca_api_key or settings.bhashini_api_key):
+        raise RuntimeError("BHASHINI_USER_ID and BHASHINI_ULCA_API_KEY are not configured.")
+    with httpx.Client(timeout=timeout) as client:
+        return _translate_batch(client, texts, source_lang, target_lang)
