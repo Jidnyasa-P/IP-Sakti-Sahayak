@@ -96,7 +96,8 @@ class Settings(BaseSettings):
     translation_provider: str = "bhashini"  # none | bhashini
     bhashini_api_key: str | None = None  # legacy compatibility
     bhashini_user_id: str | None = None
-    bhashini_ulca_api_key: str | None = None
+    bhashini_udyat_api_key: str | None = None
+    bhashini_ulca_api_key: str | None = None  # legacy compatibility
     bhashini_inference_api_key: str | None = None
 
     # Shared secret for callers of the FastAPI service.

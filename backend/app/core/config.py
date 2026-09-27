@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     translation_provider: str = "bhashini"
     bhashini_api_key: str = ""  # legacy compatibility
     bhashini_user_id: str = ""
-    bhashini_ulca_api_key: str = ""
+    bhashini_udyat_api_key: str = ""
+    bhashini_ulca_api_key: str = ""  # legacy compatibility
     bhashini_inference_api_key: str = ""
 
     # Email / SMTP
@@ -83,7 +84,7 @@ class Settings(BaseSettings):
 
     @property
     def bhashini_configured(self) -> bool:
-        return bool(self.bhashini_user_id and self.bhashini_ulca_api_key)
+        return bool(self.bhashini_inference_api_key or self.bhashini_udyat_api_key or self.bhashini_ulca_api_key)
 
     @property
     def llm_configured(self) -> bool:
